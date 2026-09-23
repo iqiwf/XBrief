@@ -5,7 +5,7 @@ import { checkGrounding, stripUngrounded } from "../lib/ground.js";
 import { fitPosts, splitSentences } from "../lib/posts.js";
 import { writePosts } from "../lib/gemini.js";
 import { parseArticle } from "../lib/extract.js";
-import { isPrivateIp, pickAddress, pinnedLookup, validateUrlShape } from "../lib/ssrf.js";
+import { describeFailure, isPrivateIp, orderAddresses, pickAddress, pinnedLookup, validateUrlShape } from "../lib/ssrf.js";
 
 test("x counts urls as 23 and leaves trailing punctuation", () => {
   assert.equal(xCount("See https://example.com/a/b."), 4 + 23 + 1);
@@ -54,10 +54,57 @@ test("private hosts and odd urls are rejected", () => {
   assert.equal(pickAddress([{ address: "10.0.0.1" }, { address: "192.168.1.1" }]), null);
   assert.equal(pickAddress([{ address: "2001:4860:4860::8888" }, { address: "10.0.0.1" }]).address, "2001:4860:4860::8888");
   assert.equal(pickAddress([{ address: "1.1.1.1", family: 4 }]).address, "1.1.1.1");
+  assert.equal(isPrivateIp("::ffff:127.0.0.1"), true);
+  assert.equal(isPrivateIp("64:ff9b::7f00:1"), true);
+  assert.equal(isPrivateIp("64:ff9b:1::1"), true);
+  assert.equal(isPrivateIp("100::1"), true);
+  assert.equal(isPrivateIp("2001:db8::1"), true);
+  assert.equal(isPrivateIp("fec0::1"), true);
+  assert.equal(isPrivateIp("198.18.0.1"), true);
+  assert.equal(isPrivateIp("203.0.113.5"), true);
+  assert.equal(isPrivateIp("198.51.100.5"), true);
+  assert.equal(isPrivateIp("2001:4860:4860::8888"), false);
+  assert.equal(isPrivateIp("2a04:4e42::367"), false);
+  assert.deepEqual(
+    orderAddresses([
+      { address: "2001:4860:4860::8888" },
+      { address: "10.0.0.1" },
+      { address: "1.1.1.1" },
+      { address: "::ffff:1.0.0.1" },
+      { address: "1.1.1.1" },
+      { address: "2606:4700:4700::1111" },
+    ]).map((item) => item.address),
+    ["1.1.1.1", "1.0.0.1", "2001:4860:4860::8888", "2606:4700:4700::1111"],
+  );
   pinnedLookup("1.1.1.1")("example.com", { all: true }, (error, result) => {
     assert.equal(error, null);
     assert.deepEqual(result, [{ address: "1.1.1.1", family: 4 }]);
   });
+  const dual = pinnedLookup(["2606:4700:4700::1111", "1.1.1.1", "10.1.1.1"]);
+  dual("example.com", { all: true }, (error, result) => {
+    assert.equal(error, null);
+    assert.deepEqual(result, [
+      { address: "1.1.1.1", family: 4 },
+      { address: "2606:4700:4700::1111", family: 6 },
+    ]);
+  });
+  dual("example.com", { family: 6 }, (error, address, family) => {
+    assert.equal(error, null);
+    assert.equal(address, "2606:4700:4700::1111");
+    assert.equal(family, 6);
+  });
+  pinnedLookup(["10.0.0.1"])("example.com", {}, (error) => {
+    assert.equal(error.code, "EBADADDR");
+  });
+});
+
+test("fetch failures keep the underlying cause", () => {
+  const cause = new Error("connect ECONNREFUSED");
+  cause.code = "ECONNREFUSED";
+  const error = new TypeError("fetch failed");
+  error.cause = cause;
+  assert.match(describeFailure(error), /ECONNREFUSED/);
+  assert.match(describeFailure(error), /fetch failed/);
 });
 
 test("reader keeps the story and drops the chrome", () => {
@@ -69,6 +116,7 @@ test("reader keeps the story and drops the chrome", () => {
     <nav>Home Sports</nav>
     <article>
       <h1>City council delays the bridge vote</h1>
+      <p>LIVE</p>
       <p>The city council voted Tuesday to delay the bridge decision until June, after residents asked for another hearing.</p>
       <p>Mayor Ada Quinn said the pause would let staff publish the cost memo. No new figure was given.</p>
       <p>The hearing is set for June 12 at city hall. Council members did not set a construction date.</p>
@@ -79,6 +127,7 @@ test("reader keeps the story and drops the chrome", () => {
   assert.equal(article.siteName, "Desk");
   assert.match(article.text, /Ada Quinn/);
   assert.doesNotMatch(article.text, /Sports/);
+  assert.doesNotMatch(article.text, /\bLIVE\b/);
 });
 
 test("json-ld and article markup beat a challenge page and related links", () => {
@@ -97,6 +146,25 @@ test("json-ld and article markup beat a challenge page and related links", () =>
     () => parseArticle("<html><body><h1>Just a moment</h1><p>Verify you are human before continuing.</p></body></html>", "https://news.example/wall"),
     /blocked the fetch|login/,
   );
+});
+
+test("article text is recovered from json-ld lists and from div layouts", () => {
+  const linked = `<!doctype html><html><head>
+    <script type="application/ld+json">{"@type":["NewsArticle"],"headline":"Council delays the vote","articleBody":["The city council voted Tuesday to delay the bridge decision until June after a long public meeting.","Mayor Ada Quinn said staff would publish the cost memo before another vote. The hearing is set for June 12 at city hall, and no construction date was placed on the calendar."]}</script>
+  </head><body><p>Preview only.</p></body></html>`;
+  assert.match(parseArticle(linked, "https://news.example/json").text, /June 12/);
+
+  const blocks = `<!doctype html><html><head><title>Markets settle after a wild open</title></head><body>
+    <div id="story">
+      <h1>Markets settle after a wild open</h1>
+      <div>Traders spent the morning reversing a sharp drop after the central bank left rates unchanged. The move surprised desks that had priced in a cut.</div>
+      <div>By the close, the local index had recovered most of the loss and the currency was steady against the dollar. Officials declined to preview the next meeting.</div>
+      <div>Analysts at North Bridge said the statement was the same one published in March, and no new stimulus figure was included in the release.</div>
+    </div>
+  </body></html>`;
+  const article = parseArticle(blocks, "https://markets.example/open");
+  assert.match(article.text, /North Bridge/);
+  assert.equal(article.title, "Markets settle after a wild open");
 });
 
 test("limits match the product", () => {
