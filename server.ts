@@ -1,4 +1,4 @@
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,14 +11,22 @@ loadEnv(join(root, ".env"));
 const publicDir = join(root, "public");
 const host = process.env.HOST || (process.env.VERCEL ? "0.0.0.0" : "127.0.0.1");
 const port = Number(process.env.PORT || 3000);
-const types = {
+const types: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".svg": "image/svg+xml",
 };
 
-async function handleStatic(res, pathname) {
+type Route = (req: IncomingMessage, res: ServerResponse) => Promise<void>;
+
+const routes: Record<string, Route> = {
+  "/api/status": status,
+  "/api/generate": generate,
+  "/api/regenerate": regenerate,
+};
+
+async function handleStatic(res: ServerResponse, pathname: string) {
   const requested = (pathname === "/" ? "index.html" : pathname).replace(/^[/\\]+/, "");
   if (!requested || requested.includes("\0")) {
     res.writeHead(404);
@@ -43,12 +51,6 @@ async function handleStatic(res, pathname) {
     res.end("Not found");
   }
 }
-
-const routes = {
-  "/api/status": status,
-  "/api/generate": generate,
-  "/api/regenerate": regenerate,
-};
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url || "/", "http://127.0.0.1");
