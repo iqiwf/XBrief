@@ -50,7 +50,9 @@ test("private hosts and odd urls are rejected", () => {
   assert.equal(isPrivateIp("::1"), true);
   assert.equal(isPrivateIp("fe80::1"), true);
   assert.equal(isPrivateIp("fd00::1"), true);
-  assert.equal(pickAddress([{ address: "1.1.1.1" }, { address: "10.0.0.1" }]), null);
+  assert.equal(pickAddress([{ address: "10.0.0.1" }, { address: "1.1.1.1" }]).address, "1.1.1.1");
+  assert.equal(pickAddress([{ address: "10.0.0.1" }, { address: "192.168.1.1" }]), null);
+  assert.equal(pickAddress([{ address: "2001:4860:4860::8888" }, { address: "10.0.0.1" }]).address, "2001:4860:4860::8888");
   assert.equal(pickAddress([{ address: "1.1.1.1", family: 4 }]).address, "1.1.1.1");
   pinnedLookup("1.1.1.1")("example.com", { all: true }, (error, result) => {
     assert.equal(error, null);
@@ -77,6 +79,24 @@ test("reader keeps the story and drops the chrome", () => {
   assert.equal(article.siteName, "Desk");
   assert.match(article.text, /Ada Quinn/);
   assert.doesNotMatch(article.text, /Sports/);
+});
+
+test("json-ld and article markup beat a challenge page and related links", () => {
+  const html = `<!doctype html><html><head>
+    <script type="application/ld+json">{"@type":"NewsArticle","headline":"Council delays the vote","articleBody":"The city council voted Tuesday to delay the bridge decision until June after a long public meeting. Mayor Ada Quinn said staff would publish the cost memo before another vote. The hearing is set for June 12 at city hall, and no construction date was placed on the calendar."}</script>
+  </head><body>
+    <article>
+      <p>The city council voted Tuesday to delay the bridge decision until June. Mayor Ada Quinn said staff would publish the cost memo.</p>
+      <aside class="related">Recommended: Sports scores and shopping deals</aside>
+    </article>
+  </body></html>`;
+  const article = parseArticle(html, "https://news.example/story");
+  assert.match(article.text, /June 12/);
+  assert.doesNotMatch(article.text, /Sports scores/);
+  assert.throws(
+    () => parseArticle("<html><body><h1>Just a moment</h1><p>Verify you are human before continuing.</p></body></html>", "https://news.example/wall"),
+    /blocked the fetch|login/,
+  );
 });
 
 test("limits match the product", () => {
