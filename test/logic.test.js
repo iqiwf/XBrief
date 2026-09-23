@@ -3,7 +3,7 @@ import test from "node:test";
 import { xCount, LIMITS } from "../lib/count.js";
 import { checkGrounding, stripUngrounded } from "../lib/ground.js";
 import { fitPosts, splitSentences } from "../lib/posts.js";
-import { writePosts } from "../lib/gemini.js";
+import { geminiKind, retryDelayMs, writePosts } from "../lib/gemini.js";
 import { parseArticle } from "../lib/extract.js";
 import { describeFailure, failureCode, isPrivateIp, orderAddresses, pickAddress, pinnedLookup, validateUrlShape } from "../lib/ssrf.js";
 
@@ -226,7 +226,7 @@ test("a busy Gemini response is retried once", async () => {
     if (calls === 1) {
       return new Response(
         JSON.stringify({ error: { message: "This model is currently experiencing high demand. Please try again later." } }),
-        { status: 503, headers: { "content-type": "application/json" } },
+        { status: 503, headers: { "content-type": "application/json", "retry-after": "0" } },
       );
     }
     return new Response(
@@ -251,6 +251,103 @@ test("a busy Gemini response is retried once", async () => {
     });
     assert.equal(calls, 2);
     assert.match(result.posts[0].text, /June/);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("gemini errors are classified and quota is not retried", async () => {
+  assert.equal(geminiKind(429, { error: { status: "RESOURCE_EXHAUSTED", message: "You exceeded your current quota, please check your plan and billing details." } }), "quota");
+  assert.equal(geminiKind(429, { error: { status: "RESOURCE_EXHAUSTED", message: "rate_limit_exceeded" } }), "rate");
+  assert.equal(geminiKind(429, { error: { message: "too many requests" } }), "rate");
+  assert.equal(geminiKind(403, { error: { status: "PERMISSION_DENIED", message: "API key not valid." } }), "auth");
+  assert.equal(geminiKind(400, { error: { message: "Invalid thinking config." } }), "thinking");
+  assert.equal(geminiKind(400, { error: { message: "Request contains an invalid argument." } }), "permanent");
+  assert.equal(geminiKind(503, { error: { message: "unavailable" } }), "transient");
+  assert.equal(retryDelayMs({ headers: { get: () => "2" } }, 0), 2000);
+  assert.ok(retryDelayMs({ headers: { get: () => null } }, 0) >= 1000);
+  assert.ok(retryDelayMs({ headers: { get: () => null } }, 1) >= 2000);
+
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response(
+      JSON.stringify({ error: { status: "RESOURCE_EXHAUSTED", message: "You exceeded your current quota, please check your plan and billing details." } }),
+      { status: 429, headers: { "content-type": "application/json" } },
+    );
+  };
+  try {
+    await assert.rejects(
+      writePosts({
+        apiKey: "server-key",
+        model: "gemini-3.5-flash",
+        mode: "standard",
+        article: { title: "Bridge", siteName: "Desk", byline: "", truncated: false, text: "The council delayed the vote." },
+      }),
+      /daily quota/,
+    );
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("a rate limit retries then stops, and a bad request does not", async () => {
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response(
+      JSON.stringify({ error: { status: "RESOURCE_EXHAUSTED", message: "too many requests" } }),
+      { status: 429, headers: { "content-type": "application/json", "retry-after": "0" } },
+    );
+  };
+  const article = { title: "Bridge", siteName: "Desk", byline: "", truncated: false, text: "The council delayed the vote." };
+  try {
+    await assert.rejects(
+      writePosts({ apiKey: "server-key", model: "gemini-3.5-flash", mode: "standard", article }),
+      /rate-limiting/,
+    );
+    assert.equal(calls, 3);
+    calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({ error: { message: "Request contains an invalid argument." } }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      );
+    };
+    await assert.rejects(
+      writePosts({ apiKey: "server-key", model: "gemini-3.5-flash", mode: "standard", article }),
+      /could not write the post/,
+    );
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("a clean draft and a second draft each call Gemini once", async () => {
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (_url, options) => {
+    calls += 1;
+    const body = JSON.parse(options.body);
+    assert.equal(body.contents.length, 1);
+    assert.equal((body.contents[0].parts[0].text.match(/Article:/g) || []).length, 1);
+    return new Response(
+      JSON.stringify({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({ posts: ["The council delayed the bridge vote until June."] }) }] } }],
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  };
+  const article = { title: "Bridge", siteName: "Desk", byline: "", truncated: false, text: "The council delayed the bridge vote until June." };
+  try {
+    await writePosts({ apiKey: "server-key", model: "gemini-3.5-flash", mode: "standard", article });
+    await writePosts({ apiKey: "server-key", model: "gemini-3.5-flash", mode: "standard", article });
+    assert.equal(calls, 2);
   } finally {
     globalThis.fetch = original;
   }
