@@ -215,6 +215,44 @@ test("rewrite drops invented numbers and keeps each post inside the limit", asyn
   }
 });
 
+test("a busy Gemini response is retried once", async () => {
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    if (calls === 1) {
+      return new Response(
+        JSON.stringify({ error: { message: "This model is currently experiencing high demand. Please try again later." } }),
+        { status: 503, headers: { "content-type": "application/json" } },
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({ posts: ["The council delayed the bridge vote until June."] }) }] } }],
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  };
+  try {
+    const result = await writePosts({
+      apiKey: "server-key",
+      model: "gemini-3.5-flash",
+      mode: "standard",
+      article: {
+        title: "Bridge",
+        siteName: "Desk",
+        byline: "",
+        truncated: false,
+        text: "The council delayed the bridge vote until June.",
+      },
+    });
+    assert.equal(calls, 2);
+    assert.match(result.posts[0].text, /June/);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 test("a long draft becomes a thread split on sentences", async () => {
   const original = globalThis.fetch;
   const sentences = [
