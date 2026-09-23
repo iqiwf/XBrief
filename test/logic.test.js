@@ -5,7 +5,7 @@ import { checkGrounding, stripUngrounded } from "../lib/ground.js";
 import { fitPosts, splitSentences } from "../lib/posts.js";
 import { writePosts } from "../lib/gemini.js";
 import { parseArticle } from "../lib/extract.js";
-import { describeFailure, isPrivateIp, orderAddresses, pickAddress, pinnedLookup, validateUrlShape } from "../lib/ssrf.js";
+import { describeFailure, failureCode, isPrivateIp, orderAddresses, pickAddress, pinnedLookup, validateUrlShape } from "../lib/ssrf.js";
 
 test("x counts urls as 23 and leaves trailing punctuation", () => {
   assert.equal(xCount("See https://example.com/a/b."), 4 + 23 + 1);
@@ -105,6 +105,9 @@ test("fetch failures keep the underlying cause", () => {
   error.cause = cause;
   assert.match(describeFailure(error), /ECONNREFUSED/);
   assert.match(describeFailure(error), /fetch failed/);
+  assert.equal(failureCode(error), "ECONNREFUSED");
+  const abort = new DOMException("The operation was aborted.", "AbortError");
+  assert.equal(failureCode(abort), "AbortError");
 });
 
 test("reader keeps the story and drops the chrome", () => {
