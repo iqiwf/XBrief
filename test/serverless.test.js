@@ -109,6 +109,15 @@ test("response bodies stop at the size limit", async () => {
   assert.equal((await readLimited(small, 10)).length, 3);
 });
 
+test("cross-site posts are rejected", async () => {
+  const res = mockRes();
+  const req = jsonRequest({ url: "https://example.com", mode: "standard" });
+  req.headers.origin = "https://evil.example";
+  req.headers.host = "xbrief.vercel.app";
+  await generate(req, res);
+  assert.equal(res.statusCode, 403);
+});
+
 test("private urls are rejected before any fetch", async () => {
   const res = mockRes();
   await generate(jsonRequest({ url: "http://127.0.0.1/secret", mode: "standard" }), res);

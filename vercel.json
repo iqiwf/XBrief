@@ -1,7 +1,7 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build",
   "functions": {
-    "api/generate.js": { "maxDuration": 120 },
-    "api/regenerate.js": { "maxDuration": 120 }
+    "server.js": { "maxDuration": 120 }
   }
 }

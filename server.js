@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, resolve, sep } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { loadEnv } from "./lib/env.js";
 import { generate, regenerate, status } from "./lib/routes.js";
 
@@ -9,7 +9,7 @@ const root = fileURLToPath(new URL(".", import.meta.url));
 loadEnv(join(root, ".env"));
 
 const publicDir = join(root, "public");
-const host = process.env.HOST || "127.0.0.1";
+const host = process.env.HOST || (process.env.VERCEL ? "0.0.0.0" : "127.0.0.1");
 const port = Number(process.env.PORT || 3000);
 const types = {
   ".html": "text/html; charset=utf-8",
@@ -65,9 +65,6 @@ const server = createServer(async (req, res) => {
   res.end(JSON.stringify({ error: "Method not allowed." }));
 });
 
-const invoked = process.argv[1] ? pathToFileURL(process.argv[1]).href : "";
-if (invoked === import.meta.url) {
-  server.listen(port, host, () => {
-    console.log(`news-to-x  http://${host}:${port}`);
-  });
-}
+server.listen(port, host, () => {
+  console.log(`news-to-x  http://${host}:${port}`);
+});
