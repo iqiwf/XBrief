@@ -109,6 +109,18 @@ test("response bodies stop at the size limit", async () => {
   assert.equal((await readLimited(small, 10)).length, 3);
 });
 
+test("vercel's public host is accepted for same-origin posts", async () => {
+  const res = mockRes();
+  const req = jsonRequest({ url: "http://127.0.0.1/secret", mode: "standard" });
+  req.headers["x-vercel-id"] = "sfo1::abc";
+  req.headers["x-forwarded-host"] = "xbrief.vercel.app";
+  req.headers.host = "internal.vercel";
+  req.headers.origin = "https://xbrief.vercel.app";
+  await generate(req, res);
+  assert.equal(res.statusCode, 400);
+  assert.match(res.body, /not allowed/);
+});
+
 test("cross-site posts are rejected", async () => {
   const res = mockRes();
   const req = jsonRequest({ url: "https://example.com", mode: "standard" });
