@@ -15,7 +15,13 @@ function freePort() {
 
 const port = await freePort();
 const child = spawn(process.execPath, ["server.ts"], {
-  env: { ...process.env, HOST: "127.0.0.1", PORT: String(port) },
+  env: {
+    ...process.env,
+    HOST: "127.0.0.1",
+    PORT: String(port),
+    GEMINI_API_KEY: "build-check-key",
+    SESSION_SECRET: "build-check-secret",
+  },
   stdio: ["ignore", "pipe", "pipe"],
 });
 let logs = "";
@@ -58,6 +64,12 @@ try {
     body: JSON.stringify({ url: "http://127.0.0.1/secret", mode: "standard" }),
   });
   if (blocked.status !== 400) throw new Error(`generate route returned ${blocked.status}`);
+  const again = await fetch(`http://127.0.0.1:${port}/api/regenerate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: "not-a-draft", mode: "standard" }),
+  });
+  if (again.status !== 400) throw new Error(`regenerate route returned ${again.status}`);
 } finally {
   child.kill();
 }
