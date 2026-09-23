@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadEnv } from "./lib/env.js";
 import { generate, regenerate, status } from "./lib/routes.js";
 
@@ -65,6 +65,9 @@ const server = createServer(async (req, res) => {
   res.end(JSON.stringify({ error: "Method not allowed." }));
 });
 
-server.listen(port, host, () => {
-  console.log(`news-to-x  http://${host}:${port}`);
-});
+const invoked = process.argv[1] ? pathToFileURL(process.argv[1]).href : "";
+if (invoked === import.meta.url) {
+  server.listen(port, host, () => {
+    console.log(`news-to-x  http://${host}:${port}`);
+  });
+}

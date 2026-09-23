@@ -74,6 +74,7 @@ test("signed drafts round-trip without shared memory", () => {
       words: 5,
     });
     assert.equal(openArticle(token).text, "The council delayed the vote.");
+    assert.doesNotMatch(token, /council delayed/);
     assert.throws(() => openArticle(`${token.slice(0, -8)}tampered`));
   } finally {
     if (previous === undefined) delete process.env.SESSION_SECRET;
