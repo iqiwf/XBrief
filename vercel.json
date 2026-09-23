@@ -1,0 +1,7 @@
+{
+  "buildCommand": "npm run build",
+  "functions": {
+    "api/generate.js": { "maxDuration": 60 },
+    "api/regenerate.js": { "maxDuration": 60 }
+  }
+}

@@ -4,6 +4,9 @@
   "type": "module",
   "description": "Turn a news article URL into a natural X post or thread.",
   "scripts": {
+    "build": "node scripts/bundle-client.js",
+    "prestart": "node scripts/bundle-client.js",
+    "pretest": "node scripts/bundle-client.js",
     "start": "node server.js",
     "test": "node --test"
   },
@@ -12,6 +15,14 @@
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
-    "linkedom": "^0.18.12"
+    "linkedom": "^0.18.12",
+    "twitter-text": "^3.1.0",
+    "undici": "^8.11.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
   }
 }

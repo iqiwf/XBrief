@@ -5,7 +5,7 @@ import { checkGrounding, stripUngrounded } from "../lib/ground.js";
 import { fitPosts, splitSentences } from "../lib/posts.js";
 import { writePosts } from "../lib/gemini.js";
 import { parseArticle } from "../lib/extract.js";
-import { isPrivateIp, validateUrlShape } from "../lib/ssrf.js";
+import { isPrivateIp, pickAddress, pinnedLookup, validateUrlShape } from "../lib/ssrf.js";
 
 test("x counts urls as 23 and leaves trailing punctuation", () => {
   assert.equal(xCount("See https://example.com/a/b."), 4 + 23 + 1);
@@ -46,6 +46,16 @@ test("private hosts and odd urls are rejected", () => {
   assert.throws(() => validateUrlShape("http://localhost/a"));
   assert.throws(() => validateUrlShape("file:///etc/passwd"));
   assert.equal(validateUrlShape("https://example.com/story").hostname, "example.com");
+  assert.throws(() => validateUrlShape("http://metadata.google.internal/"));
+  assert.equal(isPrivateIp("::1"), true);
+  assert.equal(isPrivateIp("fe80::1"), true);
+  assert.equal(isPrivateIp("fd00::1"), true);
+  assert.equal(pickAddress([{ address: "1.1.1.1" }, { address: "10.0.0.1" }]), null);
+  assert.equal(pickAddress([{ address: "1.1.1.1", family: 4 }]).address, "1.1.1.1");
+  pinnedLookup("1.1.1.1")("example.com", { all: true }, (error, result) => {
+    assert.equal(error, null);
+    assert.deepEqual(result, [{ address: "1.1.1.1", family: 4 }]);
+  });
 });
 
 test("reader keeps the story and drops the chrome", () => {
@@ -109,7 +119,7 @@ test("rewrite drops invented numbers and keeps each post inside the limit", asyn
     assert.equal(calls, 2);
     assert.equal(result.posts.length, 1);
     assert.ok(result.posts[0].chars <= 280);
-    assert.equal(result.posts[0].chars, [...result.posts[0].text].length);
+    assert.equal(result.posts[0].chars, xCount(result.posts[0].text));
     assert.doesNotMatch(result.posts[0].text, /90%/);
     assert.match(result.posts[0].text, /June 12/);
   } finally {

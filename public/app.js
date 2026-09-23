@@ -1,3 +1,5 @@
+import { xCount } from "/count.js";
+
 const form = document.querySelector("#form");
 const urlInput = document.querySelector("#url");
 const go = document.querySelector("#go");
@@ -19,28 +21,11 @@ function setStatus(message, isError = false) {
   status.classList.toggle("error", isError);
 }
 
-function count(text) {
-  const re = /https?:\/\/[^\s<>"']+/gi;
-  let without = "";
-  let last = 0;
-  let urls = 0;
-  for (const match of String(text).matchAll(re)) {
-    const raw = match[0];
-    const trail = raw.match(/[.,!?;:]+$/);
-    without += text.slice(last, match.index);
-    if (trail) without += trail[0];
-    urls += 1;
-    last = match.index + raw.length;
-  }
-  without += text.slice(last);
-  return [...without].length + urls * 23;
-}
-
 function render() {
   document.querySelector("#kicker").textContent = `${draft.siteName} · ${draft.words.toLocaleString()} words read`;
   document.querySelector("#title").textContent = draft.title;
   const bits = [];
-  if (draft.truncated) bits.push("The story was long, so only the first part was used.");
+  if (draft.truncated) bits.push("The story was long, so the opening, the ending, and the fact-heavy parts were kept.");
   if (draft.dropped) bits.push("A line was dropped because it added something the article did not say.");
   note.hidden = bits.length === 0;
   note.textContent = bits.join(" ");
@@ -62,7 +47,7 @@ function render() {
     copy.className = "ghost";
     copy.textContent = "Copy";
     const paint = () => {
-      const n = count(area.value);
+      const n = xCount(area.value);
       post.text = area.value;
       post.chars = n;
       counter.textContent = `${n.toLocaleString()} / ${draft.limit.toLocaleString()}`;
@@ -144,6 +129,6 @@ copyAll.addEventListener("click", async () => {
 fetch("/api/status")
   .then((response) => response.json())
   .then((data) => {
-    if (!data.configured) setStatus("Add GEMINI_API_KEY to .env and restart the server.", true);
+    if (!data.configured) setStatus("Add GEMINI_API_KEY to the server environment.", true);
   })
   .catch(() => {});
