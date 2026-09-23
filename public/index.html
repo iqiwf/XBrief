@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>News to X</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="mark">News → X</p>
+        <h1>Turn a story into a post people would actually write.</h1>
+        <p class="lede">
+          Paste a link. The article is read on the server, then rewritten in plain English. Nothing is added that the story didn’t say.
+        </p>
+      </header>
+
+      <form id="form">
+        <label for="url">Article URL</label>
+        <input id="url" name="url" type="url" inputmode="url" placeholder="https://" required autocomplete="off" />
+        <fieldset>
+          <legend>Length</legend>
+          <label class="choice"><input type="radio" name="mode" value="standard" checked /> Standard <span>280</span></label>
+          <label class="choice"><input type="radio" name="mode" value="premium" /> Premium <span>25,000</span></label>
+        </fieldset>
+        <button id="go" type="submit">Write the post</button>
+        <p id="status" class="status" role="status"></p>
+      </form>
+
+      <section id="result" hidden>
+        <div class="meta">
+          <div>
+            <p id="kicker" class="kicker"></p>
+            <h2 id="title"></h2>
+          </div>
+          <button id="again" type="button">Regenerate</button>
+        </div>
+        <p id="note" class="note" hidden></p>
+        <details id="source">
+          <summary>What was read</summary>
+          <p id="excerpt"></p>
+        </details>
+        <div id="posts"></div>
+        <button id="copy-all" type="button" class="ghost">Copy thread</button>
+      </section>
+    </main>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

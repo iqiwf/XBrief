@@ -1,0 +1,17 @@
+{
+  "name": "news-to-x",
+  "private": true,
+  "type": "module",
+  "description": "Turn a news article URL into a natural X post or thread.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "linkedom": "^0.18.12"
+  }
+}
